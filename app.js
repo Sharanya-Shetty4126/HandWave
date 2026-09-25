@@ -647,7 +647,7 @@ function saveWhiteboard() {
 
     const link = document.createElement("a");
 
-    link.download = "PhantomPen-whiteboard.png";
+    link.download = "HandWave-whiteboard.png";
     link.href = exportCanvas.toDataURL("image/png");
 
     link.click();
