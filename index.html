@@ -1,0 +1,194 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>PhantomPen | Virtual Whiteboard</title>
+
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <header class="app-header">
+        <div>
+            <p class="eyebrow">COMPUTER VISION PROJECT</p>
+            <h1>PhantomPen</h1>
+            <p class="subtitle">
+                Draw in the air. Create on the screen.
+            </p>
+        </div>
+
+        <div class="header-status">
+            <span id="connectionDot" class="status-dot"></span>
+            <span id="connectionText">Not started</span>
+        </div>
+    </header>
+
+    <main class="app-container">
+
+        <section class="toolbar" aria-label="Whiteboard tools">
+
+            <div class="tool-group">
+                <label for="penColor">Pen colour</label>
+
+                <input
+                    type="color"
+                    id="penColor"
+                    value="#315C45"
+                    aria-label="Choose pen colour"
+                >
+            </div>
+
+            <div class="tool-group">
+                <label for="penSize">
+                    Pen size:
+                    <span id="penSizeValue">5</span> px
+                </label>
+
+                <input
+                    type="range"
+                    id="penSize"
+                    min="1"
+                    max="30"
+                    value="5"
+                >
+            </div>
+
+            <button id="startCameraBtn" class="primary-btn">
+                Start camera
+            </button>
+
+            <button id="stopCameraBtn" class="secondary-btn" disabled>
+                Stop camera
+            </button>
+
+            <button id="clearBtn" class="secondary-btn">
+                Clear
+            </button>
+
+            <button id="undoBtn" class="secondary-btn">
+                Undo
+            </button>
+
+            <button id="saveBtn" class="secondary-btn">
+                Save PNG
+            </button>
+        </section>
+
+        <section class="workspace">
+
+            <div class="workspace-heading">
+                <div>
+                    <h2>Virtual whiteboard</h2>
+                    <p>
+                        Raise your index finger to draw.
+                        Fold it to stop.
+                    </p>
+                </div>
+
+                <div class="live-indicator">
+                    <span class="status-dot"></span>
+                    <span id="gestureText">Waiting</span>
+                </div>
+            </div>
+
+            <div id="boardWrapper" class="board-wrapper">
+
+                <video
+                    id="video"
+                    autoplay
+                    playsinline
+                    muted
+                ></video>
+
+                <canvas id="overlayCanvas"></canvas>
+
+                <canvas id="drawingCanvas"></canvas>
+
+                <div id="loadingMessage" class="loading-message">
+                    <p>Camera is not running.</p>
+                    <p class="small-text">
+                        Press "Start camera" to begin.
+                    </p>
+                </div>
+            </div>
+
+            <div class="info-panel">
+                <div>
+                    <span class="info-label">Detected hands</span>
+                    <strong id="handCount">0</strong>
+                </div>
+
+                <div>
+                    <span class="info-label">Gesture</span>
+                    <strong id="gestureStatus">Inactive</strong>
+                </div>
+
+                <div>
+                    <span class="info-label">Strokes</span>
+                    <strong id="strokeCount">0</strong>
+                </div>
+            </div>
+
+            <p id="statusMessage" class="status-message" role="status">
+                Ready to start.
+            </p>
+        </section>
+
+        <section class="instructions">
+            <h2>How to use PhantomPen</h2>
+
+            <div class="instruction-grid">
+                <div class="instruction-card">
+                    <span class="instruction-number">01</span>
+                    <h3>Start the camera</h3>
+                    <p>
+                        Allow camera access when your browser asks.
+                    </p>
+                </div>
+
+                <div class="instruction-card">
+                    <span class="instruction-number">02</span>
+                    <h3>Raise your index finger</h3>
+                    <p>
+                        Keep your index finger extended and
+                        your other fingers folded.
+                    </p>
+                </div>
+
+                <div class="instruction-card">
+                    <span class="instruction-number">03</span>
+                    <h3>Draw in the air</h3>
+                    <p>
+                        Move your fingertip to create a stroke
+                        on the whiteboard.
+                    </p>
+                </div>
+
+                <div class="instruction-card">
+                    <span class="instruction-number">04</span>
+                    <h3>Stop drawing</h3>
+                    <p>
+                        Fold your index finger or change your
+                        gesture to lift the virtual pen.
+                    </p>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="app-footer">
+        <p>
+            PhantomPen · A computer vision learning project
+        </p>
+    </footer>
+
+    <script type="module" src="app.js"></script>
+</body>
+</html>

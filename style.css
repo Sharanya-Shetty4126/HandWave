@@ -1,0 +1,424 @@
+
+:root {
+    --background: #f4f1e9;
+    --surface: #ffffff;
+    --surface-soft: #e8eee7;
+    --text: #20362b;
+    --muted: #68766d;
+    --border: #dce3da;
+    --primary: #315c45;
+    --primary-dark: #234632;
+    --danger: #b54a4a;
+    --shadow: 0 12px 35px rgba(35, 70, 50, 0.08);
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    min-width: 0;
+    font-family: Inter, Arial, sans-serif;
+    background: var(--background);
+    color: var(--text);
+}
+
+button,
+input {
+    font: inherit;
+}
+
+button {
+    cursor: pointer;
+}
+
+button:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+}
+
+button:focus-visible,
+input:focus-visible {
+    outline: 3px solid #9bbda6;
+    outline-offset: 3px;
+}
+
+/* Header */
+
+.app-header {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 40px 24px 24px;
+
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 20px;
+}
+
+.eyebrow {
+    margin: 0 0 8px;
+    color: var(--primary);
+    font-size: 0.75rem;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+}
+
+h1,
+h2,
+h3,
+p {
+    margin-top: 0;
+}
+
+h1 {
+    margin-bottom: 8px;
+    font-size: clamp(2.2rem, 5vw, 4rem);
+    letter-spacing: -0.05em;
+}
+
+.subtitle {
+    margin-bottom: 0;
+    color: var(--muted);
+}
+
+.header-status,
+.live-indicator {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--muted);
+    font-size: 0.9rem;
+}
+
+.status-dot {
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #9aa49d;
+}
+
+.status-dot.active {
+    background: #31935c;
+}
+
+.status-dot.error {
+    background: var(--danger);
+}
+
+/* Main layout */
+
+.app-container {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 24px 40px;
+}
+
+/* Toolbar */
+
+.toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: 12px;
+
+    padding: 16px;
+    margin-bottom: 20px;
+
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    box-shadow: var(--shadow);
+}
+
+.tool-group {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+.tool-group label {
+    color: var(--muted);
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+input[type="color"] {
+    width: 56px;
+    height: 38px;
+    padding: 3px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--surface);
+}
+
+input[type="range"] {
+    width: 125px;
+    accent-color: var(--primary);
+}
+
+button {
+    min-height: 40px;
+    padding: 9px 15px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    font-weight: 700;
+    transition:
+        background 0.2s ease,
+        transform 0.2s ease;
+}
+
+.primary-btn {
+    color: white;
+    background: var(--primary);
+    border-color: var(--primary);
+}
+
+.primary-btn:hover:not(:disabled) {
+    background: var(--primary-dark);
+}
+
+.secondary-btn {
+    color: var(--text);
+    background: var(--surface);
+}
+
+.secondary-btn:hover:not(:disabled) {
+    background: var(--surface-soft);
+}
+
+/* Workspace */
+
+.workspace {
+    min-width: 0;
+}
+
+.workspace-heading {
+    display: flex;
+    justify-content: space-between;
+    align-items: end;
+    gap: 16px;
+    margin-bottom: 14px;
+}
+
+.workspace-heading h2 {
+    margin-bottom: 5px;
+    font-size: 1.45rem;
+}
+
+.workspace-heading p {
+    margin-bottom: 0;
+    color: var(--muted);
+    font-size: 0.9rem;
+}
+
+/* Camera and canvas */
+
+.board-wrapper {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    box-shadow: var(--shadow);
+}
+
+#video,
+#overlayCanvas,
+#drawingCanvas {
+    position: absolute;
+    inset: 0;
+
+    width: 100%;
+    height: 100%;
+}
+
+#video {
+    display: block;
+    object-fit: contain;
+    background: #ffffff;
+
+    /* The preview is mirrored for natural hand movement. */
+    transform: scaleX(-1);
+}
+
+#overlayCanvas,
+#drawingCanvas {
+    pointer-events: none;
+}
+
+#overlayCanvas {
+    z-index: 2;
+}
+
+#drawingCanvas {
+    z-index: 3;
+}
+
+.loading-message {
+    position: absolute;
+    z-index: 5;
+    inset: 0;
+
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+
+    text-align: center;
+    padding: 20px;
+    background: rgba(255, 255, 255, 0.9);
+}
+
+.loading-message p {
+    margin-bottom: 6px;
+    font-weight: 800;
+}
+
+.loading-message .small-text {
+    color: var(--muted);
+    font-size: 0.9rem;
+    font-weight: 400;
+}
+
+/* Information panel */
+
+.info-panel {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-top: 14px;
+}
+
+.info-panel > div {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+
+    padding: 15px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+}
+
+.info-label {
+    color: var(--muted);
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.info-panel strong {
+    font-size: 1.25rem;
+}
+
+.status-message {
+    min-height: 24px;
+    margin: 14px 0 0;
+    color: var(--muted);
+    font-size: 0.9rem;
+}
+
+/* Instructions */
+
+.instructions {
+    margin-top: 40px;
+}
+
+.instructions h2 {
+    margin-bottom: 16px;
+}
+
+.instruction-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+}
+
+.instruction-card {
+    padding: 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+}
+
+.instruction-number {
+    display: inline-block;
+    margin-bottom: 20px;
+    color: var(--primary);
+    font-size: 0.8rem;
+    font-weight: 800;
+}
+
+.instruction-card h3 {
+    margin-bottom: 8px;
+    font-size: 1rem;
+}
+
+.instruction-card p {
+    margin-bottom: 0;
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.6;
+}
+
+/* Footer */
+
+.app-footer {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 24px 30px;
+    color: var(--muted);
+    font-size: 0.85rem;
+}
+
+/* Responsive design */
+
+@media (max-width: 850px) {
+    .app-header {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .instruction-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 560px) {
+    .app-header,
+    .app-container,
+    .app-footer {
+        padding-left: 14px;
+        padding-right: 14px;
+    }
+
+    .toolbar {
+        align-items: stretch;
+    }
+
+    .toolbar button {
+        flex: 1 1 40%;
+    }
+
+    .workspace-heading {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .info-panel {
+        grid-template-columns: 1fr;
+    }
+
+    .instruction-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .board-wrapper {
+        border-radius: 12px;
+    }
+}
