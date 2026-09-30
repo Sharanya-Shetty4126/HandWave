@@ -1,4 +1,3 @@
-
 import {
     FilesetResolver,
     HandLandmarker
@@ -23,6 +22,7 @@ const stopCameraBtn = document.getElementById("stopCameraBtn");
 const clearBtn = document.getElementById("clearBtn");
 const undoBtn = document.getElementById("undoBtn");
 const saveBtn = document.getElementById("saveBtn");
+const fullscreenBtn = document.getElementById("fullscreenBtn");
 
 const penColor = document.getElementById("penColor");
 const penSize = document.getElementById("penSize");
@@ -48,6 +48,8 @@ let handLandmarker = null;
 let cameraStream = null;
 let animationId = null;
 
+let currentTool = "pen";
+
 let isCameraRunning = false;
 let isModelReady = false;
 
@@ -56,10 +58,16 @@ let lastVideoTime = -1;
 let previousPoint = null;
 let isDrawing = false;
 
+let smoothedPoint = null;
+
+const SMOOTHING_FACTOR = 0.35;
+const MIN_MOVEMENT = 2;
+
 let currentColor = penColor.value;
 let currentPenSize = Number(penSize.value);
 
 let strokes = [];
+let currentStroke = null;
 
 
 // --------------------------------------------------
@@ -76,6 +84,39 @@ const MODEL_PATH =
 
 
 // --------------------------------------------------
+// TOOL CONFIGURATION
+// --------------------------------------------------
+
+const tools = {
+
+    pen: {
+        name: "Pen",
+        opacity: 1,
+        compositeOperation: "source-over"
+    },
+
+    marker: {
+        name: "Marker",
+        opacity: 1,
+        compositeOperation: "source-over"
+    },
+
+    highlighter: {
+        name: "Highlighter",
+        opacity: 0.3,
+        compositeOperation: "source-over"
+    },
+
+    eraser: {
+        name: "Eraser",
+        opacity: 1,
+        compositeOperation: "destination-out"
+    }
+
+};
+
+
+// --------------------------------------------------
 // UI HELPERS
 // --------------------------------------------------
 
@@ -83,23 +124,63 @@ function setStatus(message) {
     statusMessage.textContent = message;
 }
 
+
 function setConnectionStatus(message, type = "") {
+
     connectionText.textContent = message;
 
-    connectionDot.classList.remove("active", "error");
+    connectionDot.classList.remove(
+        "active",
+        "error"
+    );
 
     if (type) {
         connectionDot.classList.add(type);
     }
 }
 
+
 function setGestureStatus(message, drawing = false) {
+
     gestureText.textContent = message;
-    gestureStatus.textContent = drawing ? "Drawing" : "Inactive";
+
+    gestureStatus.textContent =
+        drawing ? "Drawing" : "Inactive";
 }
+
 
 function updateStrokeCount() {
     strokeCount.textContent = strokes.length;
+}
+
+
+// --------------------------------------------------
+// POINT SMOOTHING
+// --------------------------------------------------
+
+function smoothPoint(point) {
+
+    if (smoothedPoint === null) {
+
+        smoothedPoint = {
+            ...point
+        };
+
+        return smoothedPoint;
+    }
+
+    smoothedPoint.x +=
+        (point.x - smoothedPoint.x) *
+        SMOOTHING_FACTOR;
+
+    smoothedPoint.y +=
+        (point.y - smoothedPoint.y) *
+        SMOOTHING_FACTOR;
+
+    return {
+        x: smoothedPoint.x,
+        y: smoothedPoint.y
+    };
 }
 
 
@@ -108,10 +189,15 @@ function updateStrokeCount() {
 // --------------------------------------------------
 
 function setupCanvas() {
+
     /*
-     * A fixed internal resolution is used for the first prototype.
-     * CSS makes the canvas responsive on the page.
+     * Keep a stable internal coordinate system.
+     *
+     * CSS controls the visual size.
+     * This prevents fullscreen/resizing
+     * from accidentally clearing the drawing.
      */
+
     overlayCanvas.width = 1280;
     overlayCanvas.height = 720;
 
@@ -122,7 +208,117 @@ function setupCanvas() {
     drawingCtx.lineJoin = "round";
 }
 
+
+// --------------------------------------------------
+// CAMERA / CANVAS ASPECT RATIO
+// --------------------------------------------------
+
+function resizeCanvasesToVideo() {
+
+    const width = video.videoWidth;
+    const height = video.videoHeight;
+
+    if (!width || !height) {
+        return;
+    }
+
+    /*
+     * Match the visible board to the actual
+     * camera aspect ratio.
+     *
+     * IMPORTANT:
+     * We do NOT change canvas.width or canvas.height
+     * here because doing that clears the canvas.
+     */
+
+    const boardWrapper =
+        document.getElementById("boardWrapper");
+
+    boardWrapper.style.aspectRatio =
+        `${width} / ${height}`;
+}
+
+
+// --------------------------------------------------
+// FULLSCREEN
+// --------------------------------------------------
+
+async function toggleFullscreen() {
+
+    const boardWrapper =
+        document.getElementById("boardWrapper");
+
+    try {
+
+        if (!document.fullscreenElement) {
+
+            await boardWrapper.requestFullscreen();
+
+            boardWrapper.classList.add("fullscreen");
+
+            fullscreenBtn.textContent =
+                "Exit fullscreen";
+
+        } else {
+
+            await document.exitFullscreen();
+
+            boardWrapper.classList.remove("fullscreen");
+
+            fullscreenBtn.textContent =
+                "Fullscreen";
+        }
+
+    } catch (error) {
+
+        console.error(
+            "Fullscreen error:",
+            error
+        );
+
+        setStatus(
+            "Fullscreen mode could not be activated."
+        );
+    }
+}
+
+
+// Keep UI correct when user presses Esc.
+
+document.addEventListener(
+    "fullscreenchange",
+    () => {
+
+        const isFullscreen =
+            document.fullscreenElement !== null;
+
+        if (isFullscreen) {
+
+            fullscreenBtn.textContent =
+                "Exit fullscreen";
+
+        } else {
+
+            fullscreenBtn.textContent =
+                "Fullscreen";
+
+            const boardWrapper =
+                document.getElementById("boardWrapper");
+
+            boardWrapper.classList.remove(
+                "fullscreen"
+            );
+        }
+    }
+);
+
+
+// --------------------------------------------------
+// CLEAR CANVAS
+// --------------------------------------------------
+
 function clearCanvas() {
+
     drawingCtx.clearRect(
         0,
         0,
@@ -131,7 +327,11 @@ function clearCanvas() {
     );
 
     strokes = [];
+
     previousPoint = null;
+    currentStroke = null;
+    smoothedPoint = null;
+    isDrawing = false;
 
     updateStrokeCount();
 
@@ -144,32 +344,41 @@ function clearCanvas() {
 // --------------------------------------------------
 
 async function createHandLandmarker() {
-    setStatus("Loading hand detection model...");
-    setConnectionStatus("Loading model");
+
+    setStatus(
+        "Loading hand detection model..."
+    );
+
+    setConnectionStatus(
+        "Loading model"
+    );
 
     try {
-        const vision = await FilesetResolver.forVisionTasks(
-            WASM_PATH
-        );
 
-        handLandmarker = await HandLandmarker.createFromOptions(
-            vision,
-            {
-                baseOptions: {
-                    modelAssetPath: MODEL_PATH
-                },
+        const vision =
+            await FilesetResolver.forVisionTasks(
+                WASM_PATH
+            );
 
-                runningMode: "VIDEO",
+        handLandmarker =
+            await HandLandmarker.createFromOptions(
+                vision,
+                {
+                    baseOptions: {
+                        modelAssetPath: MODEL_PATH
+                    },
 
-                numHands: 1,
+                    runningMode: "VIDEO",
 
-                minHandDetectionConfidence: 0.6,
+                    numHands: 1,
 
-                minHandPresenceConfidence: 0.6,
+                    minHandDetectionConfidence: 0.6,
 
-                minTrackingConfidence: 0.6
-            }
-        );
+                    minHandPresenceConfidence: 0.6,
+
+                    minTrackingConfidence: 0.6
+                }
+            );
 
         isModelReady = true;
 
@@ -177,17 +386,27 @@ async function createHandLandmarker() {
             "Model ready. Press Start camera."
         );
 
-        setConnectionStatus("Model ready", "active");
+        setConnectionStatus(
+            "Model ready",
+            "active"
+        );
 
     } catch (error) {
-        console.error("Model loading error:", error);
+
+        console.error(
+            "Model loading error:",
+            error
+        );
 
         setStatus(
             "Could not load the hand detection model. " +
             "Check your internet connection and browser console."
         );
 
-        setConnectionStatus("Model error", "error");
+        setConnectionStatus(
+            "Model error",
+            "error"
+        );
     }
 }
 
@@ -197,8 +416,13 @@ async function createHandLandmarker() {
 // --------------------------------------------------
 
 async function startCamera() {
+
     if (!isModelReady) {
-        setStatus("Please wait for the model to finish loading.");
+
+        setStatus(
+            "Please wait for the model to finish loading."
+        );
+
         return;
     }
 
@@ -206,8 +430,10 @@ async function startCamera() {
         return;
     }
 
-    if (!navigator.mediaDevices ||
-        !navigator.mediaDevices.getUserMedia) {
+    if (
+        !navigator.mediaDevices ||
+        !navigator.mediaDevices.getUserMedia
+    ) {
 
         setStatus(
             "Camera access is not available in this browser."
@@ -217,54 +443,84 @@ async function startCamera() {
     }
 
     try {
-        setStatus("Requesting camera permission...");
 
-        cameraStream = await navigator.mediaDevices.getUserMedia({
-            video: {
-                width: {
-                    ideal: 1280
-                },
+        setStatus(
+            "Requesting camera permission..."
+        );
 
-                height: {
-                    ideal: 720
-                },
+        cameraStream =
+            await navigator.mediaDevices.getUserMedia(
+                {
+                    video: {
+                        width: {
+                            ideal: 1280
+                        },
 
-                facingMode: "user"
-            },
+                        height: {
+                            ideal: 720
+                        },
 
-            audio: false
-        });
+                        facingMode: "user"
+                    },
+
+                    audio: false
+                }
+            );
 
         video.srcObject = cameraStream;
 
         await video.play();
 
+        /*
+         * Wait until video dimensions are available.
+         */
+
+        resizeCanvasesToVideo();
+
         isCameraRunning = true;
 
         lastVideoTime = -1;
+
         previousPoint = null;
+        smoothedPoint = null;
 
         startCameraBtn.disabled = true;
         stopCameraBtn.disabled = false;
 
         loadingMessage.style.display = "none";
 
-        setConnectionStatus("Camera running", "active");
-        setStatus("Camera started. Raise your index finger to draw.");
+        setConnectionStatus(
+            "Camera running",
+            "active"
+        );
+
+        setStatus(
+            "Camera started. Raise your index finger to draw."
+        );
 
         renderLoop();
 
     } catch (error) {
-        console.error("Camera error:", error);
 
-        setConnectionStatus("Camera error", "error");
+        console.error(
+            "Camera error:",
+            error
+        );
+
+        setConnectionStatus(
+            "Camera error",
+            "error"
+        );
 
         if (error.name === "NotAllowedError") {
+
             setStatus(
                 "Camera permission was denied. " +
                 "Allow camera access and try again."
             );
+
         } else {
+
             setStatus(
                 "Could not start the camera. " +
                 "Check that your camera is available."
@@ -273,26 +529,38 @@ async function startCamera() {
     }
 }
 
+
 function stopCamera() {
+
     isCameraRunning = false;
 
     if (animationId !== null) {
-        cancelAnimationFrame(animationId);
+
+        cancelAnimationFrame(
+            animationId
+        );
+
         animationId = null;
     }
 
     if (cameraStream) {
-        cameraStream.getTracks().forEach(track => {
-            track.stop();
-        });
+
+        cameraStream
+            .getTracks()
+            .forEach(track => {
+                track.stop();
+            });
 
         cameraStream = null;
     }
 
     video.srcObject = null;
 
-    previousPoint = null;
-    isDrawing = false;
+    /*
+     * Finish/reset current drawing state.
+     */
+
+    stopCurrentStroke();
 
     overlayCtx.clearRect(
         0,
@@ -303,15 +571,23 @@ function stopCamera() {
 
     handCount.textContent = "0";
 
-    setGestureStatus("Waiting", false);
+    setGestureStatus(
+        "Waiting",
+        false
+    );
 
     startCameraBtn.disabled = false;
     stopCameraBtn.disabled = true;
 
     loadingMessage.style.display = "flex";
 
-    setConnectionStatus("Camera stopped");
-    setStatus("Camera stopped.");
+    setConnectionStatus(
+        "Camera stopped"
+    );
+
+    setStatus(
+        "Camera stopped."
+    );
 }
 
 
@@ -320,36 +596,45 @@ function stopCamera() {
 // --------------------------------------------------
 
 function isIndexFingerExtended(landmarks) {
+
     /*
+     * Landmark 8 = index fingertip
+     * Landmark 6 = index PIP joint
+     *
+     * Smaller y means higher in the image.
+     *
      * This is a simple first-version heuristic.
-     *
-     * Landmark 8  = index fingertip
-     * Landmark 6  = index finger PIP joint
-     *
-     * In a typical upright palm view, a smaller y-coordinate
-     * means a point is higher in the image.
-     *
-     * This rule is not reliable for every hand orientation.
      */
+
     const indexTip = landmarks[8];
     const indexPip = landmarks[6];
 
     return indexTip.y < indexPip.y;
 }
 
+
 function isDrawingGesture(landmarks) {
-    return isIndexFingerExtended(landmarks);
+
+    return isIndexFingerExtended(
+        landmarks
+    );
 }
 
+
+// --------------------------------------------------
+// COORDINATE MAPPING
+// --------------------------------------------------
+
 function getMirroredCanvasPoint(landmark) {
-    /*
-     * The camera preview is mirrored using CSS.
-     * We mirror x here too, so the virtual pen follows
-     * the movement naturally.
-     */
+
     return {
-        x: (1 - landmark.x) * drawingCanvas.width,
-        y: landmark.y * drawingCanvas.height
+        x:
+            (1 - landmark.x) *
+            drawingCanvas.width,
+
+        y:
+            landmark.y *
+            drawingCanvas.height
     };
 }
 
@@ -358,47 +643,109 @@ function getMirroredCanvasPoint(landmark) {
 // DRAWING FUNCTIONS
 // --------------------------------------------------
 
-let currentStroke = null;
-
 function drawLine(from, to) {
+
+    const tool = tools[currentTool];
+
     drawingCtx.beginPath();
 
-    drawingCtx.moveTo(from.x, from.y);
-    drawingCtx.lineTo(to.x, to.y);
+    drawingCtx.moveTo(
+        from.x,
+        from.y
+    );
 
-    drawingCtx.strokeStyle = currentColor;
-    drawingCtx.lineWidth = currentPenSize;
+    drawingCtx.lineTo(
+        to.x,
+        to.y
+    );
+
+    drawingCtx.lineWidth =
+        currentPenSize;
 
     drawingCtx.lineCap = "round";
     drawingCtx.lineJoin = "round";
 
+    drawingCtx.globalAlpha =
+        tool.opacity;
+
+    drawingCtx.globalCompositeOperation =
+        tool.compositeOperation;
+
+    drawingCtx.strokeStyle =
+        currentColor;
+
     drawingCtx.stroke();
+
+    /*
+     * Always restore the canvas state
+     * after drawing.
+     */
+
+    drawingCtx.globalAlpha = 1;
+
+    drawingCtx.globalCompositeOperation =
+        "source-over";
 }
 
+
 function addStrokePoint(point) {
+
     if (currentStroke === null) {
+
         currentStroke = {
+
             points: [point],
+
             color: currentColor,
-            size: currentPenSize
+
+            size: currentPenSize,
+
+            tool: currentTool
         };
 
         previousPoint = point;
+
         return;
     }
 
     if (previousPoint !== null) {
-        drawLine(previousPoint, point);
+
+        const distance =
+            distanceBetweenPoints(
+                previousPoint,
+                point
+            );
+
+        if (distance < MIN_MOVEMENT) {
+            return;
+        }
+
+        drawLine(
+            previousPoint,
+            point
+        );
     }
 
-    currentStroke.points.push(point);
+    currentStroke.points.push(
+        point
+    );
+
     previousPoint = point;
 }
 
+
 function stopCurrentStroke() {
+
     if (currentStroke !== null) {
-        if (currentStroke.points.length >= 2) {
-            strokes.push(currentStroke);
+
+        if (
+            currentStroke.points.length >= 2
+        ) {
+
+            strokes.push(
+                currentStroke
+            );
+
             updateStrokeCount();
         }
 
@@ -406,22 +753,36 @@ function stopCurrentStroke() {
     }
 
     previousPoint = null;
+
+    /*
+     * Reset smoothing so the next stroke
+     * starts exactly from the new finger position.
+     */
+
+    smoothedPoint = null;
+
     isDrawing = false;
 }
+
 
 // --------------------------------------------------
 // LANDMARK VISUALISATION
 // --------------------------------------------------
 
 function drawHandLandmarks(landmarks) {
-    const width = overlayCanvas.width;
-    const height = overlayCanvas.height;
+
+    const width =
+        overlayCanvas.width;
+
+    const height =
+        overlayCanvas.height;
 
     /*
-     * These are the standard 21 hand-landmark connections.
-     * Each pair identifies two landmarks that should be joined.
+     * Standard 21 hand-landmark connections.
      */
+
     const connections = [
+
         [0, 1],
         [1, 2],
         [2, 3],
@@ -450,51 +811,131 @@ function drawHandLandmarks(landmarks) {
         [0, 17]
     ];
 
-    overlayCtx.strokeStyle = "rgba(49, 92, 69, 0.85)";
+
+    overlayCtx.strokeStyle =
+        "rgba(49, 92, 69, 0.85)";
+
     overlayCtx.lineWidth = 3;
 
-    for (const [startIndex, endIndex] of connections) {
-        const start = landmarks[startIndex];
-        const end = landmarks[endIndex];
 
-        const x1 = (1 - start.x) * width;
-        const y1 = start.y * height;
+    for (
+        const [startIndex, endIndex]
+        of connections
+    ) {
 
-        const x2 = (1 - end.x) * width;
-        const y2 = end.y * height;
+        const start =
+            landmarks[startIndex];
+
+        const end =
+            landmarks[endIndex];
+
+        const x1 =
+            (1 - start.x) * width;
+
+        const y1 =
+            start.y * height;
+
+        const x2 =
+            (1 - end.x) * width;
+
+        const y2 =
+            end.y * height;
 
         overlayCtx.beginPath();
-        overlayCtx.moveTo(x1, y1);
-        overlayCtx.lineTo(x2, y2);
+
+        overlayCtx.moveTo(
+            x1,
+            y1
+        );
+
+        overlayCtx.lineTo(
+            x2,
+            y2
+        );
+
         overlayCtx.stroke();
     }
 
+
+    /*
+     * Draw all landmark points.
+     */
+
     for (const landmark of landmarks) {
-        const x = (1 - landmark.x) * width;
-        const y = landmark.y * height;
+
+        const x =
+            (1 - landmark.x) * width;
+
+        const y =
+            landmark.y * height;
 
         overlayCtx.beginPath();
-        overlayCtx.arc(x, y, 5, 0, Math.PI * 2);
 
-        overlayCtx.fillStyle = "#315C45";
+        overlayCtx.arc(
+            x,
+            y,
+            5,
+            0,
+            Math.PI * 2
+        );
+
+        overlayCtx.fillStyle =
+            "#315C45";
+
         overlayCtx.fill();
     }
 
-    /*
-     * Highlight the index fingertip.
-     * Landmark 8 is the index fingertip.
-     */
-    const indexTip = landmarks[8];
 
-    const tipX = (1 - indexTip.x) * width;
-    const tipY = indexTip.y * height;
+    /*
+     * Highlight index fingertip.
+     *
+     * Landmark 8 = index fingertip.
+     */
+
+    const indexTip =
+        landmarks[8];
+
+    const tipX =
+        (1 - indexTip.x) * width;
+
+    const tipY =
+        indexTip.y * height;
 
     overlayCtx.beginPath();
-    overlayCtx.arc(tipX, tipY, 10, 0, Math.PI * 2);
 
-    overlayCtx.strokeStyle = "#D6A343";
+    overlayCtx.arc(
+        tipX,
+        tipY,
+        10,
+        0,
+        Math.PI * 2
+    );
+
+    overlayCtx.strokeStyle =
+        "#D6A343";
+
     overlayCtx.lineWidth = 4;
+
     overlayCtx.stroke();
+}
+
+
+// --------------------------------------------------
+// DISTANCE
+// --------------------------------------------------
+
+function distanceBetweenPoints(a, b) {
+
+    const dx =
+        a.x - b.x;
+
+    const dy =
+        a.y - b.y;
+
+    return Math.sqrt(
+        dx * dx +
+        dy * dy
+    );
 }
 
 
@@ -503,7 +944,11 @@ function drawHandLandmarks(landmarks) {
 // --------------------------------------------------
 
 function processFrame() {
-    if (!handLandmarker || !isCameraRunning) {
+
+    if (
+        !handLandmarker ||
+        !isCameraRunning
+    ) {
         return;
     }
 
@@ -511,19 +956,35 @@ function processFrame() {
         return;
     }
 
+
     /*
-     * Avoid processing the exact same video frame repeatedly.
+     * Avoid processing the exact same
+     * video frame repeatedly.
      */
-    if (video.currentTime === lastVideoTime) {
+
+    if (
+        video.currentTime ===
+        lastVideoTime
+    ) {
         return;
     }
 
-    lastVideoTime = video.currentTime;
+    lastVideoTime =
+        video.currentTime;
 
-    const results = handLandmarker.detectForVideo(
-        video,
-        performance.now()
-    );
+
+    const results =
+        handLandmarker.detectForVideo(
+            video,
+            performance.now()
+        );
+
+
+    /*
+     * Clear only the landmark overlay.
+     *
+     * The drawing canvas is NOT cleared.
+     */
 
     overlayCtx.clearRect(
         0,
@@ -532,37 +993,99 @@ function processFrame() {
         overlayCanvas.height
     );
 
-    const hands = results.landmarks || [];
 
-    handCount.textContent = String(hands.length);
+    const hands =
+        results.landmarks || [];
+
+
+    handCount.textContent =
+        String(hands.length);
+
+
+    /*
+     * No hand.
+     */
 
     if (hands.length === 0) {
+
         stopCurrentStroke();
-        setGestureStatus("No hand detected", false);
+
+        setGestureStatus(
+            "No hand detected",
+            false
+        );
+
         return;
     }
 
-    const landmarks = hands[0];
 
-    drawHandLandmarks(landmarks);
+    const landmarks =
+        hands[0];
 
-    const drawingGesture = isDrawingGesture(landmarks);
+
+    drawHandLandmarks(
+        landmarks
+    );
+
+
+    const drawingGesture =
+        isDrawingGesture(
+            landmarks
+        );
+
+
+    /*
+     * INDEX FINGER EXTENDED
+     * = DRAWING
+     */
 
     if (drawingGesture) {
-        const point = getMirroredCanvasPoint(landmarks[8]);
+
+        const rawPoint =
+            getMirroredCanvasPoint(
+                landmarks[8]
+            );
+
+
+        const point =
+            smoothPoint(
+                rawPoint
+            );
+
 
         if (!isDrawing) {
+
             isDrawing = true;
-            previousPoint = point;
+
+            previousPoint =
+                point;
+
         } else {
-            addStrokePoint(point);
+
+            addStrokePoint(
+                point
+            );
         }
 
-        setGestureStatus("Drawing", true);
+
+        setGestureStatus(
+            "Drawing",
+            true
+        );
 
     } else {
+
+        /*
+         * Finger lifted.
+         * Finish the current stroke.
+         */
+
         stopCurrentStroke();
-        setGestureStatus("Pen lifted", false);
+
+        setGestureStatus(
+            "Pen lifted",
+            false
+        );
     }
 }
 
@@ -572,21 +1095,26 @@ function processFrame() {
 // --------------------------------------------------
 
 function renderLoop() {
+
     if (!isCameraRunning) {
         return;
     }
 
     processFrame();
 
-    animationId = requestAnimationFrame(renderLoop);
+    animationId =
+        requestAnimationFrame(
+            renderLoop
+        );
 }
 
 
 // --------------------------------------------------
-// SAVE AND UNDO
+// REDRAW STORED STROKES
 // --------------------------------------------------
 
 function redrawAllStrokes() {
+
     drawingCtx.clearRect(
         0,
         0,
@@ -594,43 +1122,109 @@ function redrawAllStrokes() {
         drawingCanvas.height
     );
 
+
     for (const stroke of strokes) {
-        if (stroke.points.length < 2) {
+
+        if (
+            stroke.points.length < 2
+        ) {
             continue;
         }
 
+
+        /*
+         * Get the tool that was used
+         * for this particular stroke.
+         */
+
+        const tool =
+            tools[stroke.tool] ||
+            tools.pen;
+
+
         drawingCtx.beginPath();
+
 
         drawingCtx.moveTo(
             stroke.points[0].x,
             stroke.points[0].y
         );
 
-        for (let i = 1; i < stroke.points.length; i++) {
+
+        for (
+            let i = 1;
+            i < stroke.points.length;
+            i++
+        ) {
+
             drawingCtx.lineTo(
                 stroke.points[i].x,
                 stroke.points[i].y
             );
         }
 
-        drawingCtx.strokeStyle = stroke.color;
-        drawingCtx.lineWidth = stroke.size;
-        drawingCtx.lineCap = "round";
-        drawingCtx.lineJoin = "round";
+
+        drawingCtx.strokeStyle =
+            stroke.color;
+
+        drawingCtx.lineWidth =
+            stroke.size;
+
+        drawingCtx.lineCap =
+            "round";
+
+        drawingCtx.lineJoin =
+            "round";
+
+
+        drawingCtx.globalAlpha =
+            tool.opacity;
+
+        drawingCtx.globalCompositeOperation =
+            tool.compositeOperation;
+
 
         drawingCtx.stroke();
+
+
+        /*
+         * Restore default canvas state.
+         */
+
+        drawingCtx.globalAlpha = 1;
+
+        drawingCtx.globalCompositeOperation =
+            "source-over";
     }
 }
 
+
+// --------------------------------------------------
+// SAVE WHITEBOARD
+// --------------------------------------------------
+
 function saveWhiteboard() {
-    const exportCanvas = document.createElement("canvas");
 
-    exportCanvas.width = drawingCanvas.width;
-    exportCanvas.height = drawingCanvas.height;
+    const exportCanvas =
+        document.createElement("canvas");
 
-    const exportCtx = exportCanvas.getContext("2d");
+    exportCanvas.width =
+        drawingCanvas.width;
 
-    exportCtx.fillStyle = "#ffffff";
+    exportCanvas.height =
+        drawingCanvas.height;
+
+
+    const exportCtx =
+        exportCanvas.getContext("2d");
+
+
+    /*
+     * White background.
+     */
+
+    exportCtx.fillStyle =
+        "#ffffff";
 
     exportCtx.fillRect(
         0,
@@ -639,20 +1233,35 @@ function saveWhiteboard() {
         exportCanvas.height
     );
 
+
+    /*
+     * Copy drawing.
+     */
+
     exportCtx.drawImage(
         drawingCanvas,
         0,
         0
     );
 
-    const link = document.createElement("a");
 
-    link.download = "HandWave-whiteboard.png";
-    link.href = exportCanvas.toDataURL("image/png");
+    const link =
+        document.createElement("a");
+
+    link.download =
+        "AirInk-whiteboard.png";
+
+    link.href =
+        exportCanvas.toDataURL(
+            "image/png"
+        );
 
     link.click();
 
-    setStatus("Whiteboard exported as PNG.");
+
+    setStatus(
+        "Whiteboard exported as PNG."
+    );
 }
 
 
@@ -660,44 +1269,101 @@ function saveWhiteboard() {
 // TOOLBAR EVENT LISTENERS
 // --------------------------------------------------
 
-penColor.addEventListener("input", () => {
-    currentColor = penColor.value;
-});
+penColor.addEventListener(
+    "input",
+    () => {
 
-penSize.addEventListener("input", () => {
-    currentPenSize = Number(penSize.value);
-    penSizeValue.textContent = String(currentPenSize);
-});
-
-clearBtn.addEventListener("click", () => {
-    clearCanvas();
-});
-
-undoBtn.addEventListener("click", () => {
-    if (strokes.length === 0) {
-        setStatus("There are no strokes to undo.");
-        return;
+        currentColor =
+            penColor.value;
     }
+);
 
-    strokes.pop();
 
-    redrawAllStrokes();
-    updateStrokeCount();
+penSize.addEventListener(
+    "input",
+    () => {
 
-    setStatus("Last stroke removed.");
-});
+        currentPenSize =
+            Number(penSize.value);
 
-saveBtn.addEventListener("click", () => {
-    saveWhiteboard();
-});
+        penSizeValue.textContent =
+            String(currentPenSize);
+    }
+);
 
-startCameraBtn.addEventListener("click", () => {
-    startCamera();
-});
 
-stopCameraBtn.addEventListener("click", () => {
-    stopCamera();
-});
+clearBtn.addEventListener(
+    "click",
+    () => {
+
+        clearCanvas();
+    }
+);
+
+
+undoBtn.addEventListener(
+    "click",
+    () => {
+
+        if (strokes.length === 0) {
+
+            setStatus(
+                "There are no strokes to undo."
+            );
+
+            return;
+        }
+
+
+        strokes.pop();
+
+        redrawAllStrokes();
+
+        updateStrokeCount();
+
+        setStatus(
+            "Last stroke removed."
+        );
+    }
+);
+
+
+saveBtn.addEventListener(
+    "click",
+    () => {
+
+        saveWhiteboard();
+    }
+);
+
+
+startCameraBtn.addEventListener(
+    "click",
+    () => {
+
+        startCamera();
+    }
+);
+
+
+stopCameraBtn.addEventListener(
+    "click",
+    () => {
+
+        stopCamera();
+    }
+);
+
+
+// FULLSCREEN BUTTON
+
+fullscreenBtn.addEventListener(
+    "click",
+    () => {
+
+        toggleFullscreen();
+    }
+);
 
 
 // --------------------------------------------------

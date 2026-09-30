@@ -1,0 +1,12 @@
+{
+  "name": "airink",
+  "version": "1.0.0",
+  "description": "AirInk - a hand-gesture-controlled virtual whiteboard using MediaPipe",
+  "type": "module",
+  "scripts": {
+    "dev": "live-server ."
+  },
+  "devDependencies": {
+    "live-server": "^1.2.2"
+  }
+}

@@ -216,10 +216,36 @@ button {
 
 /* Camera and canvas */
 
+/* Fullscreen whiteboard */
+
+.board-wrapper.fullscreen {
+    position: fixed;
+    inset: 0;
+
+    width: 100vw;
+    height: 100vh;
+
+    aspect-ratio: auto;
+
+    z-index: 1000;
+
+    border: none;
+    border-radius: 0;
+
+    background: #000;
+}
+
+.board-wrapper.fullscreen #video,
+.board-wrapper.fullscreen #overlayCanvas,
+.board-wrapper.fullscreen #drawingCanvas {
+    width: 100%;
+    height: 100%;
+}
+
 .board-wrapper {
     position: relative;
     width: 100%;
-    aspect-ratio: 16 / 9;
+    aspect-ratio: 16 / 9; /* temporary fallback */
     overflow: hidden;
 
     background: #fff;
@@ -237,10 +263,9 @@ button {
     width: 100%;
     height: 100%;
 }
-
 #video {
     display: block;
-    object-fit: contain;
+    object-fit: fill;
     background: #ffffff;
 
     /* The preview is mirrored for natural hand movement. */
