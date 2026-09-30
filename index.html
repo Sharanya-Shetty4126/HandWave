@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -35,6 +34,14 @@
         <section class="toolbar" aria-label="Whiteboard tools">
 
             <div class="tool-group">
+                <span class="group-label" id="modeLabel">Drawing mode</span>
+                <div class="segmented" role="radiogroup" aria-labelledby="modeLabel">
+                    <button type="button" id="modeHandBtn" class="segment active" role="radio" aria-checked="true">☝️ Hand</button>
+                    <button type="button" id="modePenBtn" class="segment" role="radio" aria-checked="false">🖊️ Pen</button>
+                </div>
+            </div>
+
+            <div class="tool-group">
                 <label for="penColor">Pen colour</label>
 
                 <input
@@ -60,6 +67,18 @@
                 >
             </div>
 
+            <div class="tool-group">
+                <span class="group-label">Quick colours</span>
+                <div class="swatches">
+                    <button type="button" class="swatch" data-color="#1f1f1f" style="background:#1f1f1f" aria-label="Black"></button>
+                    <button type="button" class="swatch" data-color="#d64545" style="background:#d64545" aria-label="Red"></button>
+                    <button type="button" class="swatch" data-color="#e8902e" style="background:#e8902e" aria-label="Orange"></button>
+                    <button type="button" class="swatch" data-color="#2f9e5b" style="background:#2f9e5b" aria-label="Green"></button>
+                    <button type="button" class="swatch" data-color="#2f6fdb" style="background:#2f6fdb" aria-label="Blue"></button>
+                    <button type="button" class="swatch" data-color="#8b4fd8" style="background:#8b4fd8" aria-label="Purple"></button>
+                </div>
+            </div>
+
             <button id="startCameraBtn" class="primary-btn">
                 Start camera
             </button>
@@ -72,15 +91,38 @@
                 Clear
             </button>
 
-            <button id="undoBtn" class="secondary-btn">
+            <button id="undoBtn" class="secondary-btn" disabled>
                 Undo
+            </button>
+
+            <button id="redoBtn" class="secondary-btn" disabled>
+                Redo
             </button>
 
             <button id="saveBtn" class="secondary-btn">
                 Save PNG
             </button>
+
             <button id="fullscreenBtn" class="secondary-btn">
-    Fullscreen
+                Fullscreen
+            </button>
+        </section>
+
+        <section class="toolbar pen-toolbar" id="penToolbar" aria-label="Pen tracking" hidden>
+            <button id="calibrateBtn" class="primary-btn">Calibrate pen</button>
+            <span id="penSwatch" class="pen-swatch" title="Colour being tracked"></span>
+            <button id="penDownBtn" class="secondary-btn">Pen: down</button>
+            <p class="pen-help">
+                Click the coloured tip of your pen in the video.
+                Press Space to lift or lower the pen.
+                Use a pen with a bright cap or tip (blue, green, pink).
+            </p>
+            <button
+    type="button"
+    id="capturePenBtn"
+    class="secondary-btn"
+>
+    Capture pen
 </button>
         </section>
 
@@ -90,8 +132,7 @@
                 <div>
                     <h2>Virtual whiteboard</h2>
                     <p>
-                        Raise your index finger to draw.
-                        Fold it to stop.
+                        <span id="gestureHint">☝️ Draw &nbsp;·&nbsp; 🖐️ Erase &nbsp;·&nbsp; ✊ Pause</span>
                     </p>
                 </div>
 
@@ -114,6 +155,14 @@
 
                 <canvas id="drawingCanvas"></canvas>
 
+                <div id="calibrationHint" class="calibration-hint" hidden>Click the tip of your pen</div>
+                <div id="captureOverlay" class="capture-overlay" hidden>
+    <p class="capture-hint">
+        Drag a box around your pen, then release.
+    </p>
+    <div id="captureBox" class="capture-box" hidden></div>
+</div>
+
                 <div id="loadingMessage" class="loading-message">
                     <p>Camera is not running.</p>
                     <p class="small-text">
@@ -134,7 +183,7 @@
                 </div>
 
                 <div>
-                    <span class="info-label">Strokes</span>
+                    <span class="info-label">Actions</span>
                     <strong id="strokeCount">0</strong>
                 </div>
             </div>
@@ -158,28 +207,29 @@
 
                 <div class="instruction-card">
                     <span class="instruction-number">02</span>
-                    <h3>Raise your index finger</h3>
+                    <h3>☝️ Index finger — Draw</h3>
                     <p>
-                        Keep your index finger extended and
-                        your other fingers folded.
+                        Extend only your index finger and move it
+                        through the air to paint a stroke.
                     </p>
                 </div>
 
                 <div class="instruction-card">
                     <span class="instruction-number">03</span>
-                    <h3>Draw in the air</h3>
+                    <h3>🖐️ Open palm — Erase</h3>
                     <p>
-                        Move your fingertip to create a stroke
-                        on the whiteboard.
+                        Show all four fingers to rub out pixels
+                        underneath your fingertip.
                     </p>
                 </div>
 
                 <div class="instruction-card">
                     <span class="instruction-number">04</span>
-                    <h3>Stop drawing</h3>
+                    <h3>✊ Fist — Pause</h3>
                     <p>
-                        Fold your index finger or change your
-                        gesture to lift the virtual pen.
+                        Close your hand (or move it out of frame)
+                        to lift the virtual pen without stopping
+                        the camera.
                     </p>
                 </div>
             </div>
